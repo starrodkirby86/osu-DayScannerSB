@@ -31,7 +31,22 @@ namespace StorybrewScripts {
         public int StartTime = 0;
 
         [Configurable]
+        public int TriggerTime = 5000;
+
+        [Configurable]
+        public float GlideVelocity = (float)0.5;
+
+        [Configurable]
+        public float XVariance = 50;
+
+        [Configurable]
+        public float YVariance = 50;
+
+        [Configurable]
         public int GlideDuration = 500;
+
+        [Configurable]
+        public OsbEasing PreEasingEffect;
 
         [Configurable]
         public OsbEasing EasingEffect;
@@ -44,27 +59,53 @@ namespace StorybrewScripts {
         #endregion
 
         #region Privates
-        // private Bitmap targetImage;
+        //private Bitmap targetImage;
+        
         private List<ParticleGlideObject> particles = new List<ParticleGlideObject>();
 
         #endregion
 
-        #region Image Methods
         /*
+        #region Image Methods
+        
         public void LoadTargetImage(string filename) {
             // Loads the image specified by filename into targetImage.
             // This will create the image file containing the pixels for the particles
             // to eventually glide to.
             try {
-                targetImage = (Bitmap)targetImage.FromFile(filename, true);
+                targetImage = (Bitmap) Bitmap.FromFile(@filename, true);
             }
             catch {
                 Console.Error.WriteLine("Cannot find target image from file location: " + filename);
             }
         }
-        */
+        
+        public void AddPixelsToList() {
+            // With the loaded image, locate all pixels that are fully black
+            // and add their location to the particle glide object list.
 
+            // I don't know if these asserts actually work man lol
+            Debug.Assert(targetImage != null);
+
+            // Scan through the matrix for black pixels
+            // TODO: Different criteria?
+
+            for(int x = 0; x < targetImage.Width; x++) {
+                for(int y = 0; y < targetImage.Height; y++) {
+                    if(targetImage.GetPixel(x,y) == Color.Black) {
+                    Vector2 randomCoord = new Vector2(Random(0,640), Random(0, 480));
+                    Vector2 targetCoord = new Vector2(x,y);
+                    particles.Add(new ParticleGlideObject(randomCoord, targetCoord));
+                    }
+                }
+            }
+
+
+        }
+        
         #endregion
+
+        */
 
         #region Particle Methods
         public void GenerateParticle(ParticleGlideObject p) {
@@ -77,11 +118,32 @@ namespace StorybrewScripts {
             var layer = GetLayer("ParticleGliders");
             var sprite = layer.CreateSprite(Particle1SpritePath, OsbOrigin.Centre, p.initV);
 
-            // Good, now move to the target spot
-            sprite.Move(EasingEffect, StartTime, StartTime + GlideDuration, sprite.PositionAt(StartTime), p.targetV);
+            GlideRandomly(sprite);
+            GlideToTarget(sprite, p);
 
-            // Alright, let's let it stay there for SHOWING
-            sprite.Fade(StartTime + GlideDuration, (StartTime + GlideDuration) + 1000, 1, 0);
+        }
+
+        public void GlideRandomly(OsbSprite s) {
+            // From StartTime to TriggerTime
+
+            // Establish random gliding motions
+            var preDuration = TriggerTime - StartTime;
+
+            // Create move effects
+             s.MoveX(PreEasingEffect, StartTime, TriggerTime, s.PositionAt(0).X, s.PositionAt(StartTime).X + (GlideVelocity * preDuration / 1000) + Random(0, XVariance*2) - XVariance);
+             s.MoveY(PreEasingEffect, StartTime, TriggerTime, s.PositionAt(0).Y, s.PositionAt(StartTime).Y + (GlideVelocity * preDuration / 1000) + Random(0, YVariance*2) - YVariance);
+        }
+
+        public void GlideToTarget(OsbSprite s, ParticleGlideObject p) {
+            // From TriggerTime to Assembled Point
+            // Good, now move to the target spot
+            var endTime = TriggerTime + GlideDuration;
+
+            s.MoveX(EasingEffect, TriggerTime, endTime, s.PositionAt(TriggerTime).X, p.targetV.X);
+            s.MoveY(EasingEffect, TriggerTime, endTime, s.PositionAt(TriggerTime).Y, p.targetV.Y);
+
+            // Alright, let's let it stay there for demonstrating the effect worked HOORAY
+            s.Fade(endTime, endTime + 1000, 1, 0);
         }
         #endregion
 
@@ -92,6 +154,10 @@ namespace StorybrewScripts {
 
             // DEBUG
             LoadFallbackTarget(); // To populate the list.
+
+            // Let's try this debugging too!
+            // LoadTargetImage(Particle1SpritePath);
+            // AddPixelsToList();
 
             Debug.Assert(particles.Count != 0);
 
@@ -108,7 +174,7 @@ namespace StorybrewScripts {
             Vector2 origin = new Vector2(320, 240);
             for (int i = -2; i < 3; i++) {
                 for (int j = -2; j < 3; j++) {
-                    Vector2 randomCoord = new Vector2(Random(-280, 861), Random(-100, 513));
+                    Vector2 randomCoord = new Vector2(Random(0,640), Random(0, 480));
                     Vector2 targetCoord = new Vector2(diagSplit * i + origin.X, diagSplit * j + origin.Y);
                     particles.Add(new ParticleGlideObject(randomCoord, targetCoord));
                 }
