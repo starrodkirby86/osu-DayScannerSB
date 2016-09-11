@@ -53,6 +53,18 @@ namespace StorybrewScripts
         [Configurable]
         public int GlitterCount = 10;
 
+        [Configurable]
+        public int ShockwaveStepTime = 100;
+
+        [Configurable]
+        public int ShockwaveDelayTime = 50;
+
+        [Configurable]
+        public int ShockwavePointX = 320;
+
+        [Configurable]
+        public int ShockwavePointY = 240;
+
         #endregion
 
         #region Privates
@@ -74,8 +86,9 @@ namespace StorybrewScripts
                 for(int y = 0; y < GridHeight; y++) {
                     var coord = new Vector2(InitialLocationX + x*TriangleSize*0.5F, InitialLocationY + y*TriangleSize);
                     grid[x,y] = layer.CreateSprite(ImagePath, OsbOrigin.Centre,coord);
+
                     if(isTriangleUpsideDown) {
-                        (grid[x,y]).FlipV(StartTime, StartTime+Duration); // Need to do the contrast to hug against each triangle
+                        (grid[x,y]).FlipV(StartTime, StartTime+Duration*2); // Need to do the contrast to hug against each triangle
                     }
                     (grid[x,y]).ColorHsb(StartTime, Random(180,240), sat, Random(1,10) * 0.1);
                     (grid[x,y]).Scale(StartTime, (float) TriangleSize / baseSize);
@@ -132,6 +145,68 @@ namespace StorybrewScripts
             }
         }
 
+        public void ShockwaveColor(float startTime, float stepTime, float delayTime, Vector2 target, CommandColor newColor) {
+            // Creates a shockwave color point beginning at startTime.
+            // The triangle closest to target becomes the first-point to flash from newColor -> baseColor.
+            // Remaining triangles will flash as well after delayTime passes for each subsequent hit.
+            // The triangles' order is based on flood-fill from that point. (ie. this is the base method)
+
+            // Initialize the flags array, all as unmarked triangles.
+            var flags = new bool [GridWidth, GridHeight];
+
+            // What triangle in the grid would be closest to the target vector's coordinates?
+            var closestX = 0;
+            var closestY = 0;
+            var closestD = float.MaxValue;
+
+            for(int x = 0; x < GridWidth; x++) {
+                for(int y = 0; y < GridHeight; y++) {
+                    var curD = Distance(grid[x,y].PositionAt(startTime), target);
+                    if(curD < closestD) {
+                        closestX = x; // New minimum found, so update the high score.
+                        closestY = y;
+                        closestD = curD;
+                    }
+                }
+            }
+
+            // After this point, we should have found the best point to begin the shockwave. So let's do it!
+            var startPoint = new Vector2(closestX, closestY);
+            ShockwaveFill(startTime, stepTime, delayTime, startPoint, newColor, startPoint, flags);
+
+        }
+
+        public void ShockwaveFill(float startTime, float stepTime, float delayTime, Vector2 slot, CommandColor newColor, Vector2 startPoint, bool [,] flags) {
+            // Flood-fill method. This method actually executes the color command to a single triangle on a shockwave.
+            // If a triangle has already been filled, it is ignored. Otherwise, execute the color flash, mark the triangle,
+            // and move to its orthogonal neighbors.
+            // Also, we have the startPoint, so we can keep track of how far we are from the shockwve.
+            // This helps us determine how much delaytime is needed for the flash to occur.
+            // To make the distinction that target is pure coordinates and slot is based on array indices, the vector2 is named differently.
+
+            // Base case  
+            if (slot.X >= GridWidth ||
+                slot.Y >= GridHeight ||
+                slot.X < 0 ||
+                slot.Y < 0 ||
+                flags[(int)slot.X, (int)slot.Y] ) {
+                return;
+            }
+
+            // We're here, so that means it's time to flash and mark.
+            var s = grid[(int)slot.X, (int)slot.Y];
+            flags[(int)slot.X, (int)slot.Y] = true;
+            var newStartTime = startTime + delayTime*ManhattanDistance(slot, startPoint);
+            s.Color(0, newStartTime, newStartTime+stepTime, newColor, s.ColorAt(startTime));
+
+            // Use recursion to flash the other neighbors.
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, -1)), newColor, startPoint, flags); // N
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(-1, 0)), newColor, startPoint, flags); // W
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, 1)), newColor, startPoint, flags); // S
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(1, 0)), newColor, startPoint, flags); // E
+
+        }
+
         #endregion
 
         #region Util Methods
@@ -146,16 +221,31 @@ namespace StorybrewScripts
             return ((float) Math.PI / 180 * angle);
         }
 
+        public float ManhattanDistance(Vector2 a, Vector2 b) {
+            // Calculates the distance between two vectors through manhattan distance.
+            // i.e. tiles, not straightforward "as the crow flies" kind.
+            return (float) ( Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) );
+         }
+
+        public float Distance(Vector2 a, Vector2 b) {
+            // Calculates the distance between two vectors.
+            return (float)Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2));
+        }
+
         public Vector3 ToHSB(CommandColor c) {
             // Converts RGB color from c to HSB
             // Assumes rgb are 0..1
             // Probably will be obsolete once an actual
             // conversion or data struct is added for HSB
-            // TODO: Bug. Colors goto 255 instead. Not successful. :(
-            var cMax = Math.Max(c.R, c.G);
-            cMax = Math.Max(cMax, c.B);
-            var cMin = Math.Min(c.R, c.G);
-            cMin = Math.Min(cMin, c.G);
+
+            var R = (float) c.R / 255;
+            var G = (float) c.G / 255;
+            var B = (float) c.B / 255;
+
+            var cMax = Math.Max(R, G);
+            cMax = Math.Max(cMax, B);
+            var cMin = Math.Min(R, G);
+            cMin = Math.Min(cMin, G);
 
             var delta = cMax - cMin;
 
@@ -165,14 +255,14 @@ namespace StorybrewScripts
             if(delta == 0) {
                 h = 0;
             }
-            else if (cMax == c.R) {
-                h = 60 * ( ( (c.G - c.B) / delta ) % 6);
+            else if (cMax == R) {
+                h = 60 * ( ( (G - B) / delta ) % 6);
             }
-            else if (cMax == c.G) {
-                h = 60 * ( ( (c.B - c.R) / delta ) + 2);
+            else if (cMax == G) {
+                h = 60 * ( ( (B - R) / delta ) + 2);
             }
             else {
-                h = 60 * ( ( (c.R - c.G) / delta ) + 4);
+                h = 60 * ( ( (R - G) / delta ) + 4);
             }
 
             // saturation
@@ -194,9 +284,11 @@ namespace StorybrewScripts
         public override void Generate()
         {
             InitializeGrid();
-            RotateGrid(StartTime, StartTime+Duration, Angle2Radians(AngleRotation));
-            ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
-            //Glitter(StartTime, (float)Duration/10, GlitterCount);
+            //RotateGrid(StartTime, StartTime+Duration, Angle2Radians(AngleRotation));
+            //ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
+            //Glitter(StartTime+1, (float)Duration/10, GlitterCount);
+            ShockwaveColor(StartTime+1, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(255, 0, 0));
+            Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
         }
     }
 }
