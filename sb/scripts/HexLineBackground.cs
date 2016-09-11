@@ -42,7 +42,8 @@ namespace StorybrewScripts
     public class Hexagon {
      /// <summary>
      /// Hexagon
-     /// Fancy    
+     /// A data structure that holds a hexagon shape. The shape itself is basically...
+     /// -> The 12 lines of the hexagon   
      
     }
 }

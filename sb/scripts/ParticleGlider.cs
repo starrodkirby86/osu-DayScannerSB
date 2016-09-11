@@ -59,13 +59,12 @@ namespace StorybrewScripts {
         #endregion
 
         #region Privates
-        //private Bitmap targetImage;
+        private Bitmap targetImage;
         
         private List<ParticleGlideObject> particles = new List<ParticleGlideObject>();
 
         #endregion
 
-        /*
         #region Image Methods
         
         public void LoadTargetImage(string filename) {
@@ -73,7 +72,7 @@ namespace StorybrewScripts {
             // This will create the image file containing the pixels for the particles
             // to eventually glide to.
             try {
-                targetImage = (Bitmap) Bitmap.FromFile(@filename, true);
+                targetImage = GetProjectBitmap(TargetSpriteImagePath);
             }
             catch {
                 Console.Error.WriteLine("Cannot find target image from file location: " + filename);
@@ -105,7 +104,6 @@ namespace StorybrewScripts {
         
         #endregion
 
-        */
 
         #region Particle Methods
         public void GenerateParticle(ParticleGlideObject p) {
@@ -156,8 +154,8 @@ namespace StorybrewScripts {
             LoadFallbackTarget(); // To populate the list.
 
             // Let's try this debugging too!
-            // LoadTargetImage(Particle1SpritePath);
-            // AddPixelsToList();
+            //LoadTargetImage(Particle1SpritePath);
+            //AddPixelsToList();
 
             Debug.Assert(particles.Count != 0);
 
