@@ -150,6 +150,7 @@ namespace StorybrewScripts
             // The triangle closest to target becomes the first-point to flash from newColor -> baseColor.
             // Remaining triangles will flash as well after delayTime passes for each subsequent hit.
             // The triangles' order is based on flood-fill from that point. (ie. this is the base method)
+            // TODO: Make something that actually utilizes flood-fill...
 
             // Initialize the flags array, all as unmarked triangles.
             var flags = new bool [GridWidth, GridHeight];
@@ -207,6 +208,28 @@ namespace StorybrewScripts
 
         }
 
+        #endregion
+
+        #region Entry/Exit Methods
+        public void ScaleXYFlip(int startTime, int duration, bool isExit, bool isY) {
+            // Those triangles can enter together! Altogether. :) Individually.
+            // Entry or exit depending on the boolean entered. (Entry=0, Exit=1)
+            // X or Y depending on the boolean enetered. (x=0, y=1)
+            for(int x = 0; x < GridWidth; x++) {
+                for(int y = 0; y < GridHeight; y++) {
+                    var s = grid[x,y];
+                    var initialSize = (float) TriangleSize / baseSize;
+                    var initialSizeVector = new Vector2 (initialSize, initialSize);
+                    var flipScale = (isY) ? new Vector2(initialSize, 0) : new Vector2(0, initialSize);
+                    if (isExit) {
+                        s.ScaleVec(0, startTime, startTime+duration, initialSizeVector, flipScale);
+                    }
+                    else {
+                        s.ScaleVec(0, startTime, startTime+duration, flipScale, initialSizeVector);
+                        }
+                }
+            }
+        }
         #endregion
 
         #region Util Methods
@@ -284,11 +307,13 @@ namespace StorybrewScripts
         public override void Generate()
         {
             InitializeGrid();
-            //RotateGrid(StartTime, StartTime+Duration, Angle2Radians(AngleRotation));
+            ScaleXYFlip(StartTime, 500, false, true);
+            RotateGrid(StartTime+500, StartTime+Duration+500, Angle2Radians(AngleRotation));
             //ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
             //Glitter(StartTime+1, (float)Duration/10, GlitterCount);
-            ShockwaveColor(StartTime+1, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(255, 0, 0));
-            Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
+            //ShockwaveColor(StartTime+1, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(255, 0, 0));
+            //Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
+            ScaleXYFlip(StartTime+Duration+500, 500, true, false);
         }
     }
 }
