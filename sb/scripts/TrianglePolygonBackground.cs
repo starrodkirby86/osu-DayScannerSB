@@ -88,9 +88,9 @@ namespace StorybrewScripts
                     grid[x,y] = layer.CreateSprite(ImagePath, OsbOrigin.Centre,coord);
 
                     if(isTriangleUpsideDown) {
-                        (grid[x,y]).FlipV(StartTime, StartTime+Duration*2); // Need to do the contrast to hug against each triangle
+                        (grid[x,y]).FlipV(StartTime, StartTime+Duration); // Need to do the contrast to hug against each triangle TODO: make this end @ correct endtime
                     }
-                    (grid[x,y]).ColorHsb(StartTime, Random(180,240), sat, Random(1,10) * 0.1);
+                    //(grid[x,y]).ColorHsb(StartTime, Random(180,240), sat, Random(1,10) * 0.1);
                     (grid[x,y]).Scale(StartTime, (float) TriangleSize / baseSize);
                     isTriangleUpsideDown = !isTriangleUpsideDown;
                     sat += 0.05;
@@ -184,6 +184,7 @@ namespace StorybrewScripts
             // Also, we have the startPoint, so we can keep track of how far we are from the shockwve.
             // This helps us determine how much delaytime is needed for the flash to occur.
             // To make the distinction that target is pure coordinates and slot is based on array indices, the vector2 is named differently.
+            // TODO: Make this contain a delegate method and a "wall condition".
 
             // Base case  
             if (slot.X >= GridWidth ||
@@ -198,7 +199,7 @@ namespace StorybrewScripts
             var s = grid[(int)slot.X, (int)slot.Y];
             flags[(int)slot.X, (int)slot.Y] = true;
             var newStartTime = startTime + delayTime*ManhattanDistance(slot, startPoint);
-            s.Color(0, newStartTime, newStartTime+stepTime, newColor, s.ColorAt(startTime));
+            s.Color(0, newStartTime, newStartTime+stepTime, newColor, s.ColorAt(startTime)); // Change me to executing the delegate
 
             // Use recursion to flash the other neighbors.
             ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, -1)), newColor, startPoint, flags); // N
@@ -211,6 +212,22 @@ namespace StorybrewScripts
         #endregion
 
         #region Entry/Exit Methods
+        public void Fade(int startTime, int duration, bool isExit) {
+            // Have these triangles fade in/out.
+            // Entry of exit depending on the boolean entered. (Entry=0, Exit=1)
+            for(int x = 0; x < GridWidth; x++) {
+                for(int y = 0; y < GridHeight; y++) {
+                    var s = grid[x,y];
+                    if(isExit) {
+                        s.Fade(0, startTime, startTime+duration, s.OpacityAt(startTime), 0);
+                    }
+                    else {
+                        s.Fade(0, startTime, startTime+duration, 0, 1);
+                    }
+                }
+            }
+        }
+
         public void ScaleXYFlip(int startTime, int duration, bool isExit, bool isY) {
             // Those triangles can enter together! Altogether. :) Individually.
             // Entry or exit depending on the boolean entered. (Entry=0, Exit=1)
@@ -228,6 +245,68 @@ namespace StorybrewScripts
                         s.ScaleVec(0, startTime, startTime+duration, flipScale, initialSizeVector);
                         }
                 }
+            }
+        }
+        #endregion
+
+        #region Color Methods
+        public void ColorTriangle(int startTime, int duration, Vector2 coord, CommandColor newColor) {
+            // Colors a single triangle at startTime for duration.
+            // Select the triangle using the coord command.
+            // It'll change to newColor.
+            // To instantly change color, just set duration to 0.
+
+            // Don't color if it's OOB.
+            if(coord.X >= GridWidth ||
+               coord.X < 0 ||
+               coord.Y >= GridHeight ||
+               coord.Y < 0) {
+                   return;
+               }
+
+            // But you made it here, so let's color.
+            var s = grid[(int)coord.X, (int)coord.Y];
+            s.Color(0, startTime, duration, s.ColorAt(startTime), newColor);
+        }
+
+        public void ColorRowCol(int startTime, int duration, int coord, CommandColor newColor, bool isCol) {
+            // Colors a row or column.
+            // Select the row/col to fill with coord to newColor.
+            // isCol bool: row=0, col=1
+            
+            // OOB check
+            if(coord < 0 ||
+               coord > ( (isCol) ? GridHeight : GridWidth) ) { return; }
+
+            // Now get ready to fill that baby in.
+            for(var b = 0; b < ( (isCol) ? GridWidth : GridHeight ); b++) {
+                var s = (isCol) ? grid[b,coord] : grid[coord,b];
+                s.Color(0, startTime, startTime+duration, s.ColorAt(startTime), newColor);
+            }
+            
+        }
+
+        public void ColorLinearGradient(int startTime, int duration, CommandColor colorA, CommandColor colorB, bool isVertical) {
+            // Colors triangles in a gradient from colorA to colorB.
+            // Decide whether to make the gradient transition vertically or horizontally
+            // using the Boolean. (horizontal=0, vertical=1)
+
+            var difference = new Vector3( ( colorB.R - colorA.R ),
+                                          ( colorB.G - colorA.G ),
+                                          ( colorB.B - colorA.B ) ) ; // The difference between colorA and colorB
+
+            var colorVector = new Vector3( colorA.R, colorA.G, colorA.B );   // Ideally the goal is a linear dist from this to colorB
+            
+            var limiter = (isVertical) ? GridWidth : GridHeight; // How many points to split for the linear distribution
+            
+            var step = Vector3.Divide(difference, limiter);
+            // var step = new Vector3( difference.X / limiter, difference.Y / limiter, difference.Z / limiter ); // The step...
+            
+            // Now comes the loop:
+            for(int a = 0; a < limiter; a++) {
+                var decColorVector = Vector3.Divide(colorVector, 255);
+                ColorRowCol(startTime, duration, a, new CommandColor(decColorVector), !isVertical);
+                colorVector += step;
             }
         }
         #endregion
@@ -308,10 +387,13 @@ namespace StorybrewScripts
         {
             InitializeGrid();
             ScaleXYFlip(StartTime, 500, false, true);
+            ColorLinearGradient(StartTime, 1, new CommandColor(0.5,0.6,0.1), new CommandColor(1.0, 0.0, 0), true);
+            //ColorLinearGradient(StartTime, 1, new CommandColor(0.1,0.1,0.1), new CommandColor(0.4, 0.9, 1.0), true);
+            ColorLinearGradient(StartTime+Duration/2, 1000, new CommandColor(0.5,0.6,0.1), new CommandColor(0.1, 0.3, 0.5), false);
             RotateGrid(StartTime+500, StartTime+Duration+500, Angle2Radians(AngleRotation));
             //ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
             //Glitter(StartTime+1, (float)Duration/10, GlitterCount);
-            //ShockwaveColor(StartTime+1, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(255, 0, 0));
+            ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0));
             //Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
             ScaleXYFlip(StartTime+Duration+500, 500, true, false);
         }
