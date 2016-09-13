@@ -65,11 +65,14 @@ namespace StorybrewScripts
         [Configurable]
         public int ShockwavePointY = 240;
 
+        public delegate void executeSprite(OsbSprite s, float startTime, float stepTime);  // for shockwave
+        public delegate bool querySprite(OsbSprite s, float queryTime);                   // wall condition for shockwave
+
         #endregion
 
         #region Privates
         OsbSprite [,] grid;
-        private int baseSize = 100; // triangle.png's pixel size (for ref)
+        private int baseSize = 100;                        // triangle.png's pixel size (for ref)
         #endregion
 
         #region Grid Methods
@@ -145,12 +148,12 @@ namespace StorybrewScripts
             }
         }
 
-        public void ShockwaveColor(float startTime, float stepTime, float delayTime, Vector2 target, CommandColor newColor) {
+        public void ShockwaveColor(float startTime, float stepTime, float delayTime, Vector2 target, CommandColor newColor, CommandColor ignoreColor) {
             // Creates a shockwave color point beginning at startTime.
             // The triangle closest to target becomes the first-point to flash from newColor -> baseColor.
             // Remaining triangles will flash as well after delayTime passes for each subsequent hit.
-            // The triangles' order is based on flood-fill from that point. (ie. this is the base method)
-            // TODO: Make something that actually utilizes flood-fill...
+            // The triangles' order is based on the manhattan distance.
+            // Also, we can set an ignoreColor that acts as a hard wall that the shockwave can't penetrate through.
 
             // Initialize the flags array, all as unmarked triangles.
             var flags = new bool [GridWidth, GridHeight];
@@ -171,27 +174,30 @@ namespace StorybrewScripts
                 }
             }
 
+            executeSprite shockColor = delegate(OsbSprite s, float st, float step) { s.Color(0, st, st+step, newColor, s.ColorAt(st)); } ;
+            querySprite shockWall = delegate(OsbSprite s, float st) { return s.ColorAt(st) == ignoreColor; } ;
+
             // After this point, we should have found the best point to begin the shockwave. So let's do it!
             var startPoint = new Vector2(closestX, closestY);
-            ShockwaveFill(startTime, stepTime, delayTime, startPoint, newColor, startPoint, flags);
+            ShockwaveFill(startTime, stepTime, delayTime, startPoint, startPoint, flags, shockColor, shockWall);
 
         }
 
-        public void ShockwaveFill(float startTime, float stepTime, float delayTime, Vector2 slot, CommandColor newColor, Vector2 startPoint, bool [,] flags) {
+        public void ShockwaveFill(float startTime, float stepTime, float delayTime, Vector2 slot, Vector2 startPoint, bool [,] flags, executeSprite Go, querySprite Wall) {
             // Flood-fill method. This method actually executes the color command to a single triangle on a shockwave.
-            // If a triangle has already been filled, it is ignored. Otherwise, execute the color flash, mark the triangle,
+            // If a triangle has already been filled, it is ignored. Otherwise, execute the Go method, mark the triangle,
             // and move to its orthogonal neighbors.
-            // Also, we have the startPoint, so we can keep track of how far we are from the shockwve.
+            // Also, we have the startPoint, so we can keep track of how far we are from the shockwave.
             // This helps us determine how much delaytime is needed for the flash to occur.
             // To make the distinction that target is pure coordinates and slot is based on array indices, the vector2 is named differently.
-            // TODO: Make this contain a delegate method and a "wall condition".
 
             // Base case  
             if (slot.X >= GridWidth ||
                 slot.Y >= GridHeight ||
                 slot.X < 0 ||
                 slot.Y < 0 ||
-                flags[(int)slot.X, (int)slot.Y] ) {
+                flags[(int)slot.X, (int)slot.Y] ||
+                Wall(grid[(int)slot.X,(int)slot.Y],startTime)) {
                 return;
             }
 
@@ -199,13 +205,13 @@ namespace StorybrewScripts
             var s = grid[(int)slot.X, (int)slot.Y];
             flags[(int)slot.X, (int)slot.Y] = true;
             var newStartTime = startTime + delayTime*ManhattanDistance(slot, startPoint);
-            s.Color(0, newStartTime, newStartTime+stepTime, newColor, s.ColorAt(startTime)); // Change me to executing the delegate
+            Go(s, newStartTime, stepTime); // Change me to executing the delegate
 
             // Use recursion to flash the other neighbors.
-            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, -1)), newColor, startPoint, flags); // N
-            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(-1, 0)), newColor, startPoint, flags); // W
-            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, 1)), newColor, startPoint, flags); // S
-            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(1, 0)), newColor, startPoint, flags); // E
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, -1)), startPoint, flags, Go, Wall); // N
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(-1, 0)), startPoint, flags, Go, Wall); // W
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(0, 1)), startPoint, flags, Go, Wall); // S
+            ShockwaveFill(startTime, stepTime, delayTime, Vector2.Add(slot, new Vector2(1, 0)), startPoint, flags, Go, Wall); // E
 
         }
 
@@ -388,12 +394,14 @@ namespace StorybrewScripts
             InitializeGrid();
             ScaleXYFlip(StartTime, 500, false, true);
             ColorLinearGradient(StartTime, 1, new CommandColor(0.5,0.6,0.1), new CommandColor(1.0, 0.0, 0), true);
+            ColorRowCol(StartTime+2,1, GridHeight/2, new CommandColor(0.5, 0.5, 0.5), false);
+            ColorRowCol(StartTime+2,1, (int) (GridHeight/1.3), new CommandColor(0.5, 0.5, 0.5), true);            
             //ColorLinearGradient(StartTime, 1, new CommandColor(0.1,0.1,0.1), new CommandColor(0.4, 0.9, 1.0), true);
             ColorLinearGradient(StartTime+Duration/2, 1000, new CommandColor(0.5,0.6,0.1), new CommandColor(0.1, 0.3, 0.5), false);
             RotateGrid(StartTime+500, StartTime+Duration+500, Angle2Radians(AngleRotation));
             //ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
             //Glitter(StartTime+1, (float)Duration/10, GlitterCount);
-            ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0));
+            ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0), new CommandColor(0.5, 0.5, 0.5));
             //Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
             ScaleXYFlip(StartTime+Duration+500, 500, true, false);
         }
