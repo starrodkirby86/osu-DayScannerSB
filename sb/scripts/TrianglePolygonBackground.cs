@@ -156,12 +156,13 @@ namespace StorybrewScripts
             }
         }
 
-        public void ShockwaveColor(float startTime, float stepTime, float delayTime, Vector2 target, CommandColor newColor, CommandColor ignoreColor) {
+        public void ShockwaveColor(float startTime, float stepTime, float delayTime, Vector2 target, CommandColor newColor, CommandColor ignoreColor, bool executeAsLoop) {
             // Creates a shockwave color point beginning at startTime.
             // The triangle closest to target becomes the first-point to flash from newColor -> baseColor.
             // Remaining triangles will flash as well after delayTime passes for each subsequent hit.
             // The triangles' order is based on the manhattan distance.
             // Also, we can set an ignoreColor that acts as a hard wall that the shockwave can't penetrate through.
+            // We can also execute it as a loop, where it will execute the alt. shockcolor method. (but this is hacky, don't do it other than darenimo3)
 
             // Initialize the flags array, all as unmarked triangles.
             var flags = new bool [GridWidth, GridHeight];
@@ -183,11 +184,15 @@ namespace StorybrewScripts
             }
 
             executeSprite shockColor = delegate(OsbSprite s, float st, float step) { s.Color(0, st, st+step, newColor, s.ColorAt(st)); } ;
+            executeSprite shockColorLoop = delegate(OsbSprite s, float st, float step) {    s.StartLoopGroup(st, 4); 
+                                                                                s.Color(OsbEasing.InBack, 0, step, newColor, s.ColorAt(st));
+                                                                                s.Fade(2400,1);
+                                                                                s.EndGroup(); };
             querySprite shockWall = delegate(OsbSprite s, float st) { return s.ColorAt(st) == ignoreColor; } ;
 
             // After this point, we should have found the best point to begin the shockwave. So let's do it!
             var startPoint = new Vector2(closestX, closestY);
-            ShockwaveFill(startTime, stepTime, delayTime, startPoint, startPoint, flags, shockColor, shockWall);
+            ShockwaveFill(startTime, stepTime, delayTime, startPoint, startPoint, flags, ( executeAsLoop ? shockColorLoop : shockColor), shockWall);
 
         }
 
@@ -281,6 +286,14 @@ namespace StorybrewScripts
             // But you made it here, so let's color.
             var s = grid[(int)coord.X, (int)coord.Y];
             s.Color(0, startTime, startTime+duration, s.ColorAt(startTime), newColor);
+        }
+
+        public void ColorAllTriangles(int startTime, int duration, CommandColor newColor) {
+            // Colors all the triangles as... THE SAME COLOR.
+            // To instantly change color, just set duration to 0.
+            foreach(var s in grid) {
+                s.Color(0, startTime, startTime+duration, s.ColorAt(startTime), newColor);
+            }
         }
 
         public void ColorRowCol(int startTime, int duration, int coord, CommandColor newColor, bool isCol) {
@@ -453,7 +466,7 @@ namespace StorybrewScripts
 
         #region Implementations
 
-        public enum TriangleBehavior {Fallback, TestGradient, GuitarSolo};
+        public enum TriangleBehavior {Fallback, TestGradient, GuitarSolo, DareNiMo3};
         
         public void Fallback() {
             // This is where the initial generate code went.
@@ -466,7 +479,7 @@ namespace StorybrewScripts
             RotateGrid(StartTime+500, StartTime+Duration+500, Angle2Radians(AngleRotation));
             //ScaleGrid(StartTime+Duration, StartTime+Duration*2, (float)0.5);
             //Glitter(StartTime+1, (float)Duration/10, GlitterCount);
-            ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0), new CommandColor(0.5, 0.5, 0.5));
+            ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0), new CommandColor(0.5, 0.5, 0.5), false);
             //Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
             ScaleXYFlip(StartTime+Duration+500, 500, true, false);
         }
@@ -534,12 +547,23 @@ namespace StorybrewScripts
             
         }
 
+        public void DareNiMo3() {
+            // This portion plays during the last dare ni mo part before the DAY SCANNER mania.
+            // It expects a BIG-ass set of triangles.
+
+            ColorAllTriangles(StartTime,0,new CommandColor(0.09,0.09,0.09));
+            ShockwaveColor(StartTime,300,75/4,new Vector2(320,240),new CommandColor(1,1,1),new CommandColor(1,0,0),true);
+            ScaleXYFlip(StartTime+Duration-500,500,true, false);
+
+
+        }
+
         #endregion
 
         public override void Generate()
         {
             // Set up the list of possible behaviors the triangles can do...
-            executeBehavior[] implementations = {Fallback, TestGradient, GuitarSolo};
+            executeBehavior[] implementations = {Fallback, TestGradient, GuitarSolo, DareNiMo3};
             
             // And go!
             InitializeGrid();
