@@ -18,6 +18,10 @@ namespace StorybrewScripts
     /// effects you can try out. Also transition stuff is available too.
     /// The triangles are also arranged in a manipulatable 2D Matrix that can be
     /// used for coloration purposes.
+    ///
+    /// One referential note here! It seems that from (-50,50) a whole screen is 18x5 triangles.
+    /// So shoot for that.
+    ///
     /// </summary>    
     public class TrianglePolygonBackground : StoryboardObjectGenerator
     {
@@ -48,6 +52,9 @@ namespace StorybrewScripts
         public string ImagePath = "SB/triangle.png";
 
         [Configurable]
+        public TriangleBehavior BehaviorType = TriangleBehavior.Fallback; 
+
+        [Configurable]
         public float AngleRotation = 45;
 
         [Configurable]
@@ -65,8 +72,9 @@ namespace StorybrewScripts
         [Configurable]
         public int ShockwavePointY = 240;
 
-        public delegate void executeSprite(OsbSprite s, float startTime, float stepTime);  // for shockwave
-        public delegate bool querySprite(OsbSprite s, float queryTime);                   // wall condition for shockwave
+        public delegate void executeSprite(OsbSprite s, float startTime, float stepTime);   // for shockwave
+        public delegate bool querySprite(OsbSprite s, float queryTime);                     // wall condition for shockwave
+        public delegate void executeBehavior();                                             // For generate()
 
         #endregion
 
@@ -272,7 +280,7 @@ namespace StorybrewScripts
 
             // But you made it here, so let's color.
             var s = grid[(int)coord.X, (int)coord.Y];
-            s.Color(0, startTime, duration, s.ColorAt(startTime), newColor);
+            s.Color(0, startTime, startTime+duration, s.ColorAt(startTime), newColor);
         }
 
         public void ColorRowCol(int startTime, int duration, int coord, CommandColor newColor, bool isCol) {
@@ -314,6 +322,60 @@ namespace StorybrewScripts
                 ColorRowCol(startTime, duration, a, new CommandColor(decColorVector), !isVertical);
                 colorVector += step;
             }
+        }
+
+        public void ColorTopography(int startTime, int duration, CommandColor colorA, CommandColor colorB, int steps, Vector2 [] hotspot) {
+            // Colors the hotspot areas with colorA,
+            // and for every tile that isn't in the hotspot array,
+            // color them towards colorB depending on the minimum Manhattan Distance
+            // (i.e. the closest point)
+            // Set duration to 0 for instant colorization
+            // Ignore entries that are OOB. (Because they aren't in the grid when we are iterating anyway!)
+            // However, we can do cool things like have partial colorations, so all is not lost.
+
+            var difference = new Vector3( ( colorB.R - colorA.R ),
+                                          ( colorB.G - colorA.G ),
+                                          ( colorB.B - colorA.B ) ) ;   // The difference between colorA and colorB
+            var step = Vector3.Divide(difference, steps);               // Gives us the linear distribution per step   
+
+            for(int x = 0; x < GridWidth; x++) {
+                for(int y = 0; y < GridHeight; y++) {
+                    var curSpot = new Vector2(x,y);
+                    if(Array.IndexOf(hotspot, curSpot) != -1) {
+                        // Is found in the hotspot array
+                        // So that means we color that with colorA!
+                        ColorTriangle(startTime, duration, curSpot, colorA);
+                    }
+                    else {
+                        // So we could not find it. Therefore, it'll be in some limbo or to colorB.
+                        // Find the difference and have a vector that represents one step (similar to gradient)
+                        // So first we need to figure out the minimum manhattan distance.
+                        int minManhattan = int.MaxValue;
+
+                        foreach(var point in hotspot) {
+                            var candidate = ManhattanDistance(curSpot, point);
+                            if(candidate < minManhattan) {
+                                minManhattan = (int) candidate;
+                            }
+                        }
+
+                        // Next up, calculate the color based on how many steps away...
+                        var limboColor = new Vector3();
+                        if(minManhattan >= steps) {
+                            limboColor = new Vector3( colorB.R, colorB.G, colorB.B ); // so far that it's pretty much colorB
+                        }
+                        else {
+                            limboColor = new Vector3(colorA.R, colorA.G, colorA.B) + Vector3.Multiply(step, minManhattan);
+                        }
+
+                        limboColor = Vector3.Divide(limboColor, 255);
+
+                        // Finally, we can issue the color.
+                        ColorTriangle(startTime, duration, curSpot, new CommandColor(limboColor)); 
+                    }
+                }
+            }
+
         }
         #endregion
 
@@ -389,9 +451,12 @@ namespace StorybrewScripts
         }
         #endregion
 
-        public override void Generate()
-        {
-            InitializeGrid();
+        #region Implementations
+
+        public enum TriangleBehavior {Fallback, TestGradient, GuitarSolo};
+        
+        public void Fallback() {
+            // This is where the initial generate code went.
             ScaleXYFlip(StartTime, 500, false, true);
             ColorLinearGradient(StartTime, 1, new CommandColor(0.5,0.6,0.1), new CommandColor(1.0, 0.0, 0), true);
             ColorRowCol(StartTime+2,1, GridHeight/2, new CommandColor(0.5, 0.5, 0.5), false);
@@ -404,6 +469,82 @@ namespace StorybrewScripts
             ShockwaveColor(StartTime+500, ShockwaveStepTime, ShockwaveDelayTime, new Vector2( ShockwavePointX, ShockwavePointY ), new CommandColor(1.0, 1.0, 1.0), new CommandColor(0.5, 0.5, 0.5));
             //Glitter(StartTime+Duration, (float)Duration/10, GlitterCount);
             ScaleXYFlip(StartTime+Duration+500, 500, true, false);
+        }
+
+        public void TestGradient() {
+            // A gradient test. Linear (close to) black to white.
+            ScaleXYFlip(StartTime, 100, false, true);
+            ColorLinearGradient(StartTime,0, new CommandColor(0.1, 0.1, 0.1), new CommandColor(1.0, 1.0, 1.0), true);
+            Fade(StartTime+Duration,StartTime+Duration+500,true);
+        }
+
+        public void GuitarSolo() {
+            // This is the triangle behavior for the guitar solo portion.
+            // The idea is to colorize the entire triangle area as motherf'in evil, and then the ones that aren't go through some cool flip effects.
+            var bigPoints = new Vector2[16] {   new Vector2 (8,0),
+                                                new Vector2 (9,0),
+                                                new Vector2 (10,0),
+                                                new Vector2 (7,1),
+                                                new Vector2 (11,1),
+                                                new Vector2 (4,2),
+                                                new Vector2 (5,2),
+                                                new Vector2 (6,2),
+                                                new Vector2 (12,2),
+                                                new Vector2 (13,2),
+                                                new Vector2 (14,2),
+                                                new Vector2 (5,3),
+                                                new Vector2 (9,3),
+                                                new Vector2 (13,3),
+                                                new Vector2 (4,4),
+                                                new Vector2 (14,4)
+                                            };
+
+            // Now let's create a topography color based off that.
+            CommandColor hotColor = new CommandColor(0.8,0.1,0.1);
+            CommandColor coldColor = new CommandColor(0.1,0.1,0.1);
+            ColorTopography(StartTime, 0, hotColor, coldColor, 3, bigPoints);
+
+            var beatDuration = 4*(60000)/Beatmap.GetTimingPointAt((int)StartTime).Bpm;
+
+            // The goal is to have the central non-hotspot flip on and off with backgrounds.
+            executeSprite flipOff = delegate(OsbSprite s, float startTime, float duration) { s.StartLoopGroup(startTime, 4); 
+                                                                                                s.ScaleVec(OsbEasing.OutCubic, 0, duration, new CommandScale(1,1), new CommandScale(1,0));
+                                                                                                s.ScaleVec(OsbEasing.InCubic, beatDuration-duration, beatDuration, new CommandScale(1,0), new CommandScale(1,1));
+                                                                                                s.Fade(beatDuration*2,1); 
+                                                                                             s.EndGroup(); };
+                                                                                    
+            executeSprite shockColor = delegate(OsbSprite s, float st, float step) {    s.StartLoopGroup(st, 8); 
+                                                                                            s.Color(OsbEasing.OutQuint, 0, step, new CommandColor(1,0,0), s.ColorAt(st));
+                                                                                            s.Fade(beatDuration,1);
+                                                                                        s.EndGroup(); };
+
+            // Query for the wall being the hotColor
+            querySprite colorWall = delegate(OsbSprite s, float queryTime) { return s.ColorAt(queryTime) == hotColor; };
+
+            // Wonder if this works. Let's try having a loop with the shockwaves.
+            ShockwaveFill(StartTime, 600, 150, bigPoints[12] - new Vector2(0,1), bigPoints[12] , new bool[GridWidth, GridHeight], flipOff, colorWall );
+
+            // Left/right shockwave flashes?
+            ShockwaveFill(StartTime, 150, 75/2, new Vector2(0,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
+            ShockwaveFill(StartTime, 150, 75/2, new Vector2(GridWidth-1,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
+            
+
+            // HARD VALUES BAD
+            ScaleXYFlip(120645-600, 600, true, false);
+            
+        }
+
+        #endregion
+
+        public override void Generate()
+        {
+            // Set up the list of possible behaviors the triangles can do...
+            executeBehavior[] implementations = {Fallback, TestGradient, GuitarSolo};
+            
+            // And go!
+            InitializeGrid();
+            implementations[(int)BehaviorType]();
+
         }
     }
 }
