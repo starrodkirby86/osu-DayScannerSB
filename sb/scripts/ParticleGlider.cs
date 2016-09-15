@@ -61,7 +61,7 @@ namespace StorybrewScripts {
         #region Privates
         private Bitmap targetImage;
         
-        private List<ParticleGlideObject> particles = new List<ParticleGlideObject>();
+        private List<ParticleGlideObject> particles;
 
         #endregion
 
@@ -150,6 +150,7 @@ namespace StorybrewScripts {
 
         public override void Generate() {
             // Main Method!!! This is the moneymaker.
+            particles = new List<ParticleGlideObject>();
 
             // DEBUG
             //LoadFallbackTarget(); // To populate the list.
