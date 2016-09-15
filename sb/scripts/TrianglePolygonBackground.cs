@@ -19,7 +19,7 @@ namespace StorybrewScripts
     /// The triangles are also arranged in a manipulatable 2D Matrix that can be
     /// used for coloration purposes.
     ///
-    /// One referential note here! It seems that from (-50,50) a whole screen is 18x5 triangles.
+    /// One referential note here! It seems that from (-130,50) a whole screen is 20x5 triangles.
     /// So shoot for that.
     ///
     /// </summary>    
@@ -141,6 +141,7 @@ namespace StorybrewScripts
             // Individual triangles glitter a random color.
             // Original color -> glitter color -> original color
             // This loops for some time, specified by loopCount.
+            // TODO: Add param for glitter colors.
             for(int x = 0; x < GridWidth; x++) {
                 for(int y = 0; y < GridHeight; y++) {
                     var s = grid[x,y];
@@ -466,7 +467,7 @@ namespace StorybrewScripts
 
         #region Implementations
 
-        public enum TriangleBehavior {Fallback, TestGradient, GuitarSolo, DareNiMo3};
+        public enum TriangleBehavior {Fallback, TestGradient, VerseBackground, GuitarSolo, DareNiMo3};
         
         public void Fallback() {
             // This is where the initial generate code went.
@@ -491,6 +492,63 @@ namespace StorybrewScripts
             Fade(StartTime+Duration,StartTime+Duration+500,true);
         }
 
+        public void VerseBackground() {
+            // Goes for any of the verse sections.
+            // Expects a triangle grid the size of... 40x10.
+            // There are 8 measures of the verse, so every other measure we change colors.
+            // Color change is random.
+            // In the meantime, maybe a light light glitter.
+
+            // Coolors are COOOOOL.
+            var colorList = new CommandColor[5] {   new CommandColor(39.0/255,40.0/255,56.0/255),
+                                                    new CommandColor(93.0/255,83.0/255,107.0/255),
+                                                    new CommandColor(125.0/255,107.0/255,145.0/255),
+                                                    new CommandColor(165.0/255,148.0/255,249.0/255),
+                                                    new CommandColor(52.0/255,127.0/255,196.0/255)};
+
+            var hotSpots = new List<Vector2>();
+            
+            // Time to assign the hotspots that will actually be killed off.
+            for(int i = GridWidth/2 - GridWidth/10; i < (GridWidth/2+GridWidth/10) - 1; i++) {
+                for(int j = GridHeight/5; j < (GridHeight/5)*3; j++) {
+                    hotSpots.Add(new Vector2(i-2,j));
+                }
+            }
+
+            var colorMarker = Random(0,4);
+            var topographicPoints = 8;
+            var greyMarker = new Vector3((float)0.4,(float)0.4,(float)0.4);
+
+            // Shockwave to kill off the hotspots.
+            executeSprite killMe = delegate(OsbSprite s, float st, float d) { s.ScaleVec(OsbEasing.OutBounce, st, st+d, s.ScaleAt(st), new CommandScale(0,(float) TriangleSize / baseSize)); };
+            querySprite isntHotSpot = delegate(OsbSprite s, float st) { return s.ColorAt(st) != colorList[colorMarker]; };
+
+            // OK so let's make the initial topography.
+            ColorTopography(StartTime, 0, colorList[colorMarker], new CommandColor(greyMarker), topographicPoints, hotSpots.ToArray());
+            Glitter(StartTime+1,600,3);
+            ScaleXYFlip(StartTime,600,false,false);
+
+            // Till death do you part.
+            // TODO: Maybe get this to work or something.
+            ShockwaveFill(StartTime+600,600,75,hotSpots[0],new Vector2(320,240),new bool[GridWidth,GridHeight], killMe, isntHotSpot);
+
+            // Assign different colors.
+            for(int i = 1; i < 4; i++) {
+                // Update stuff
+                colorMarker = ( colorMarker + Random(1,4) ) % 5;
+                greyMarker -= new Vector3((float)0.1,(float)0.1,(float)0.1);
+                topographicPoints++;
+                // And execute!
+                ColorTopography(StartTime + (Duration/4)*i-600, 600, colorList[colorMarker], new CommandColor(greyMarker), topographicPoints, hotSpots.ToArray());
+                Glitter(StartTime + (Duration/4)*i, 600, 3);
+            }
+
+
+            // Bye bye.
+            ScaleXYFlip(StartTime+Duration-600,600,true,false);
+
+            
+        }
         public void GuitarSolo() {
             // This is the triangle behavior for the guitar solo portion.
             // The idea is to colorize the entire triangle area as motherf'in evil, and then the ones that aren't go through some cool flip effects.
@@ -538,8 +596,8 @@ namespace StorybrewScripts
             ShockwaveFill(StartTime, 600, 150, bigPoints[12] - new Vector2(0,1), bigPoints[12] , new bool[GridWidth, GridHeight], flipOff, colorWall );
 
             // Left/right shockwave flashes?
-            ShockwaveFill(StartTime, 150, 75/2, new Vector2(0,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
-            ShockwaveFill(StartTime, 150, 75/2, new Vector2(GridWidth-1,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
+            ShockwaveFill(StartTime, 300, 75/2, new Vector2(0,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
+            ShockwaveFill(StartTime, 300, 75/2, new Vector2(GridWidth-1,0), bigPoints[12], new bool[GridWidth, GridHeight], shockColor, colorWall );
             
 
             // HARD VALUES BAD
@@ -563,7 +621,7 @@ namespace StorybrewScripts
         public override void Generate()
         {
             // Set up the list of possible behaviors the triangles can do...
-            executeBehavior[] implementations = {Fallback, TestGradient, GuitarSolo, DareNiMo3};
+            executeBehavior[] implementations = {Fallback, TestGradient, VerseBackground, GuitarSolo, DareNiMo3};
             
             // And go!
             InitializeGrid();

@@ -75,7 +75,7 @@ namespace StorybrewScripts {
                 targetImage = GetProjectBitmap(TargetSpriteImagePath);
             }
             catch {
-                Console.Error.WriteLine("Cannot find target image from file location: " + filename);
+                Log("Cannot find target image from file location: " + filename);
             }
         }
         
@@ -84,6 +84,7 @@ namespace StorybrewScripts {
             // and add their location to the particle glide object list.
 
             // I don't know if these asserts actually work man lol
+            // Spoiler: They don't LOL
             Debug.Assert(targetImage != null);
 
             // Scan through the matrix for black pixels
@@ -91,10 +92,10 @@ namespace StorybrewScripts {
 
             for(int x = 0; x < targetImage.Width; x++) {
                 for(int y = 0; y < targetImage.Height; y++) {
-                    if(targetImage.GetPixel(x,y) == Color.Black) {
-                    Vector2 randomCoord = new Vector2(Random(0,640), Random(0, 480));
-                    Vector2 targetCoord = new Vector2(x,y);
-                    particles.Add(new ParticleGlideObject(randomCoord, targetCoord));
+                    if(targetImage.GetPixel(x,y).ToArgb() == Color.Black.ToArgb()) {
+                        Vector2 randomCoord = new Vector2(Random(0,936)-168, Random(0, 480));
+                        Vector2 targetCoord = new Vector2(x,y);
+                        particles.Add(new ParticleGlideObject(randomCoord, targetCoord));
                     }
                 }
             }
@@ -151,11 +152,11 @@ namespace StorybrewScripts {
             // Main Method!!! This is the moneymaker.
 
             // DEBUG
-            LoadFallbackTarget(); // To populate the list.
+            //LoadFallbackTarget(); // To populate the list.
 
             // Let's try this debugging too!
-            //LoadTargetImage(Particle1SpritePath);
-            //AddPixelsToList();
+            LoadTargetImage(Particle1SpritePath);
+            AddPixelsToList();
 
             Debug.Assert(particles.Count != 0);
 
